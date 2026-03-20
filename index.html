@@ -111,8 +111,26 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ly);
 .filter-select{font-family:'Press Start 2P',monospace;font-size:7px;letter-spacing:1px;padding:8px 12px;background:rgba(1,14,36,.9);border:2px solid rgba(255,211,42,.3);color:var(--ly);cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;min-width:220px;}
 .filter-select option{background:#021941;color:#fff;font-family:monospace;}
 .gallery-grid{display:flex;gap:28px;flex-wrap:wrap;}
-.gallery-card-wrap{transition:transform .2s;}
-.gallery-card-wrap:hover{transform:translateY(-4px);}
+
+/* CARD FLIP */
+.gallery-card-wrap{perspective:1000px;cursor:pointer;}
+.card-flipper{width:240px;position:relative;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.4,0,.2,1);}
+.gallery-card-wrap.flipped .card-flipper{transform:rotateY(180deg);}
+.gallery-card-wrap:not(.flipped) .card-flipper:hover{transform:translateY(-4px);}
+.card-face{position:absolute;top:0;left:0;width:100%;backface-visibility:hidden;-webkit-backface-visibility:hidden;}
+.card-face.card-back{transform:rotateY(180deg);background:var(--lb);border:4px solid var(--ly);box-shadow:0 0 0 2px var(--dark),0 0 28px rgba(255,211,42,.35);}
+.card-face.card-front{position:relative;}
+.card-flipper-height{position:relative;}
+
+/* CARD BACK CONTENT */
+.card-back-inner{padding:16px;display:flex;flex-direction:column;gap:12px;height:100%;}
+.card-back-header{border-bottom:2px solid rgba(255,211,42,.2);padding-bottom:10px;}
+.card-back-name{font-size:9px;color:var(--ly);letter-spacing:1px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.card-back-archetype{font-family:'VT323',monospace;font-size:16px;color:rgba(255,211,42,.7);letter-spacing:2px;}
+.card-back-desc{font-family:'VT323',monospace;font-size:14px;color:rgba(255,255,255,.5);letter-spacing:1px;line-height:1.5;font-style:italic;}
+.card-back-bio{font-family:'VT323',monospace;font-size:17px;color:var(--lw);letter-spacing:1px;line-height:1.6;flex:1;}
+.card-back-hint{font-size:5.5px;color:rgba(255,211,42,.3);letter-spacing:2px;text-align:center;margin-top:auto;padding-top:10px;border-top:1px solid rgba(255,211,42,.1);}
+
 .gallery-card-wrap .card{width:240px;}
 .gallery-card-wrap .c-name{font-size:8px;}
 .gallery-card-wrap .c-role{font-size:14px;}
@@ -393,6 +411,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ly);
       <div class="form-section-title">▶ PLAYER DETAILS</div>
       <div class="field-group"><label class="field-label">PLAYER NAME</label><input class="field-input" id="f-name" type="text" placeholder="Full Name" oninput="syncCard()" maxlength="22"></div>
       <div class="field-group"><label class="field-label">JOB TITLE / ROLE</label><input class="field-input" id="f-role" type="text" placeholder="e.g. Senior Designer" oninput="syncCard()" maxlength="28"></div>
+      <div class="field-group"><label class="field-label">BIO — SHOWN ON CARD BACK</label><textarea class="field-input" id="f-bio" placeholder="A short intro — who they are, what makes them brilliant..." maxlength="200" rows="3" style="resize:vertical;min-height:70px;"></textarea></div>
       <div class="field-group"><label class="field-label">CHOOSE YOUR CHARACTER</label><div class="avatar-grid" id="avatar-grid"></div><div id="avatar-desc" style="font-family:'VT323',monospace;font-size:15px;color:rgba(255,211,42,.7);letter-spacing:1px;margin-top:8px;min-height:20px;text-align:center;"></div></div>
       <div class="form-section-title" style="margin-top:24px;">▶ SKILL SCORES</div>
       <div id="sliders-container"></div>
@@ -403,7 +422,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--ly);
       <div class="card-wrap-label">LIVE PREVIEW</div>
       <div class="card">
         <div class="corner corner-tl"></div><div class="corner corner-tr"></div><div class="corner corner-bl"></div><div class="corner corner-br"></div>
-        <div class="c-header"><span class="c-series">LUMEN // CHAMPIONSHIP EDITION</span><span class="c-id" id="c-id">#---</span></div>
+        <div class="c-header"><span class="c-series">Lumen Dream Team</span><span class="c-id" id="c-id">#---</span></div>
         <div class="c-photo"><div class="c-av" id="c-av"></div></div>
         <div class="c-nameplate">
           <div class="c-name" id="c-name">PLAYER NAME</div>
@@ -764,8 +783,9 @@ async function saveCard(){
   const isEdit=editingId!==null;
   const cardno=isEdit?(cards.find(c=>c.id===editingId)?.cardno||nextCardNo()):nextCardNo();
   const id=isEdit?editingId:Date.now();
+  const bio=document.getElementById('f-bio').value.trim();
   if(isEdit) cards=cards.filter(c=>c.id!==editingId);
-  cards.push({id,name,role:document.getElementById('f-role').value.trim()||'',cardno,avatar:selectedAvatar,scores});
+  cards.push({id,name,role:document.getElementById('f-role').value.trim()||'',bio,cardno,avatar:selectedAvatar,scores});
   editingId=null;
   showLoading(true);
   await apiPost('saveCards',cards);
@@ -806,12 +826,18 @@ function renderGallery(){
     const statsHtml=scores.map(s=>`<div class="c-stat"><div class="c-stat-top"><span class="c-stat-name">${s.label}</span><span class="c-stat-score">${s.score}/10</span></div><div class="c-bar-track"><div class="c-bar-fill ${s.barClass}" style="width:${s.score*10}%"></div></div></div>`).join('')+`<div class="c-overall"><span class="c-overall-label">OVERALL PWR</span><span class="c-overall-score">${avg}</span></div>`;
     const pups=powerups[card.id]||[];
     const pct=Math.round((pups.length/maxPups)*100);
-    const wrap=document.createElement('div');wrap.className='gallery-card-wrap';
-    wrap.innerHTML=`
-      <div class="card">
+    const archetype=avName(card.avatar||'energizer');
+    const descriptor=avSuperpower(card.avatar||'energizer');
+    const bio=card.bio||'No bio added yet.';
+
+    const wrap=document.createElement('div');
+    wrap.className='gallery-card-wrap';
+
+    // Build front card HTML
+    const frontHtml=`<div class="card card-face card-front">
         <div class="corner corner-tl"></div><div class="corner corner-tr"></div><div class="corner corner-bl"></div><div class="corner corner-br"></div>
-        <div class="c-header"><span class="c-series">LUMEN // CHAMPIONSHIP EDITION</span><span class="c-id">${card.cardno}</span></div>
-        <div class="c-photo"><div class="c-av">${avSvg(card.avatar||'energizer',65)}<span>${avName(card.avatar||'energizer')}</span></div></div>
+        <div class="c-header"><span class="c-series">Lumen Dream Team</span><span class="c-id">${card.cardno}</span></div>
+        <div class="c-photo"><div class="c-av">${avSvg(card.avatar||'energizer',65)}<span>${archetype}</span></div></div>
         <div class="c-nameplate">
           <div class="c-name">${card.name}</div>
           <div class="c-role">${card.role||'&nbsp;'}</div>
@@ -826,13 +852,56 @@ function renderGallery(){
           </div>
         </div>
         <div class="c-footer"><span class="c-brand">LUMEN</span><span class="c-edition">DREAM TEAM 2026</span></div>
+      </div>`;
+
+    // Build back card HTML
+    const backHtml=`<div class="card-face card-back" style="min-height:100%;">
+        <div class="corner corner-tl"></div><div class="corner corner-tr"></div><div class="corner corner-bl"></div><div class="corner corner-br"></div>
+        <div class="card-back-inner">
+          <div class="card-back-header">
+            <div class="card-back-name">${card.name}</div>
+            <div class="card-back-archetype">${archetype}</div>
+          </div>
+          <div class="card-back-desc">"${descriptor}"</div>
+          <div class="card-back-bio">${bio}</div>
+          <div class="card-back-hint">▲ CLICK TO FLIP BACK</div>
+        </div>
+      </div>`;
+
+    wrap.innerHTML=`
+      <div class="card-flipper" id="flipper-${card.id}">
+        ${frontHtml}
+        ${backHtml}
       </div>
       <div class="card-actions">
-        <button class="btn-sm" onclick="openModal(${card.id},'${card.name.replace(/'/g,"\\'")}')">⚡ POWER-UP</button>
-        <button class="btn-sm" onclick="editCard(${card.id})">✏ EDIT</button>
-        <button class="btn-sm danger" onclick="deleteCard(${card.id})">✕</button>
+        <button class="btn-sm" onclick="event.stopPropagation();openModal(${card.id},'${card.name.replace(/'/g,"\\'")}')">⚡ POWER-UP</button>
+        <button class="btn-sm" onclick="event.stopPropagation();editCard(${card.id})">✏ EDIT</button>
+        <button class="btn-sm danger" onclick="event.stopPropagation();deleteCard(${card.id})">✕</button>
       </div>`;
+
+    // Set flipper height to match front card after render
+    wrap.onclick=(e)=>{
+      if(e.target.closest('.card-actions')) return;
+      wrap.classList.toggle('flipped');
+      // Sync height of flipper to whichever face is showing
+      const flipper=wrap.querySelector('.card-flipper');
+      const front=wrap.querySelector('.card-front');
+      const back=wrap.querySelector('.card-back');
+      if(wrap.classList.contains('flipped')){
+        flipper.style.height=back.offsetHeight+'px';
+      } else {
+        flipper.style.height=front.offsetHeight+'px';
+      }
+    };
+
     grid.appendChild(wrap);
+
+    // Set initial height after DOM insertion
+    requestAnimationFrame(()=>{
+      const flipper=wrap.querySelector('.card-flipper');
+      const front=wrap.querySelector('.card-front');
+      if(flipper&&front) flipper.style.height=front.offsetHeight+'px';
+    });
   });
 }
 
@@ -996,6 +1065,7 @@ function editCard(id){
   editingId=id;
   document.getElementById('f-name').value=card.name;
   document.getElementById('f-role').value=card.role||'';
+  document.getElementById('f-bio').value=card.bio||'';
   selectedAvatar=card.avatar||'energizer';buildAvatarPicker();
   card.scores.forEach(s=>{const el=document.getElementById(`range-${s.key}`);if(el){el.value=s.score;onSlide(s.key);}});
   switchTab('editor');syncCard();showToast('✏ EDITING — SAVE WHEN DONE');
@@ -1028,6 +1098,7 @@ function resetForm(){
   editingId=null;
   document.getElementById('f-name').value='';
   document.getElementById('f-role').value='';
+  document.getElementById('f-bio').value='';
   selectedAvatar='energizer';buildAvatarPicker();
   SKILLS.forEach(s=>{
     const el=document.getElementById(`range-${s.key}`);if(el)el.value=0;
